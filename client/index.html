@@ -1,0 +1,221 @@
+<body style="margin: 0; padding: 0; width: 100%; height: 100%;">
+<canvas id="ctx" width="800" height="600" style="background-color: grey"></canvas>
+<script src="https://cdn.socket.io/socket.io-1.4.5.js"></script>
+<script>
+
+	var ctx = document.getElementById("ctx").getContext("2d");
+	var canvas = document.getElementById("ctx");
+	canvas.width = document.body.clientWidth;
+	canvas.height = document.body.clientHeight;
+	var TO_RADIANS = Math.PI/180; 
+	ctx.font = '30px Arial';
+	var zooming = 1;
+
+	var socket = io();
+
+	var Entity = function( data ) {
+		var self = {
+			position: data.position,
+			id: data.id,
+			angle: data.angle
+			//hp: 0
+		}
+
+		self.update = function( data ) {
+			self.updatePosition( data );
+		}
+
+		self.updatePosition = function( data ) {
+			self.position = data.position;
+		}
+
+		return self;
+	}
+
+	var Player = function(initPack){
+        var self = {};
+        self.id = initPack.id;
+        self.number = initPack.number;
+        self.x = initPack.position.x;
+        self.y = initPack.position.y;
+        self.hp = initPack.hp;
+        self.angle = initPack.angle;
+        self.sprite = new Image();
+		self.sprite.src = '/client/img/serverPlayer.png';
+		self.hpBar = new Image();
+		self.hpBar.src = '/client/img/hpBar.jpg'
+		self.width = initPack.width;
+		self.height = initPack.height;
+
+        self.draw = function (marginx, marginy) {
+        	var width = (2*self.hp)/2;
+				rotateAndPaintImage(ctx, self.sprite, self.angle * TO_RADIANS, self.x + 25 - Player.list[selfId].x+document.body.clientWidth/2, self.y + 25 - Player.list[selfId].y +document.body.clientHeight/2, self.width, self.height);
+				ctx.drawImage(self.hpBar, self.x-self.width/2 + 25 - Player.list[selfId].x + document.body.clientWidth/2, self.y - 50 - Player.list[selfId].y + document.body.clientHeight/2, width, 5);
+		}
+
+        Player.list[self.id] = self;
+        return self;
+    }
+
+    Player.list = {};
+
+    var Bullet = function(initPack){
+        var self = {};
+        self.id = initPack.id;
+        self.number = initPack.number;
+        self.x = initPack.position.x;
+        self.y = initPack.position.y;
+        self.angle = initPack.angle;
+        self.sprite = new Image();
+		self.sprite.src = '/client/img/bullet.png';
+		self.width = initPack.width;
+		self.height = initPack.height;
+
+
+        self.draw = function (marginx, marginy) {
+
+			rotateAndPaintImage(ctx, self.sprite, self.angle * TO_RADIANS, self.x- Player.list[selfId].x + document.body.clientWidth/2, self.y- Player.list[selfId].y + document.body.clientHeight/2, self.width, self.height);
+		}
+
+        Bullet.list[self.id] = self;
+        return self;
+    }
+
+    Bullet.list = {};
+
+    var selfId = null;
+    var selfPlayer = null;
+	socket.on('init', function( data ){   
+        //{ player : [{id:123,number:'1',x:0,y:0},{id:1,number:'2',x:0,y:0}], bullet: []}
+
+        for(var i = 0 ; i < data.player.length; i++){
+            new Player(data.player[i]);
+        }
+        for(var i = 0 ; i < data.bullet.length; i++){
+            new Bullet(data.bullet[i]);
+        }
+    });
+	
+	socket.on('self', function( data ){
+		selfId = data.selfID;
+	});
+
+	setInterval(function(){
+        ctx.clearRect(0,0,document.body.clientWidth, document.body.clientHeight);
+        for(var i in Bullet.list)
+            Bullet.list[i].draw();
+
+        for(var i in Player.list){
+        	if(Player.list[selfId] != Player.list[i])
+            	Player.list[i].draw(Player.list[selfId].x, Player.list[selfId].y);
+            else
+            	Player.list[i].draw(-Player.list[selfId].x, -Player.list[selfId].y);
+        }
+        canvas.background.position.x -= Player.list[selfId].x;
+    },1000/60);
+
+	socket.on('update', function( data ){
+
+		for (var i = 0; i < data.bullet.length; i++) {
+			//ctx.drawImage(playerImg ,0, data[i].y, 100, 100);
+			//rotateAndPaintImage(ctx, bulletImg, data.bullet[i].angle * TO_RADIANS, data.bullet[i].x, data.bullet[i].y, bulletImg.width / 10, bulletImg.height / 10);
+			var pack = data.bullet[i];
+            var b = Bullet.list[pack.id];
+            if(b){
+                if(pack.position.x !== undefined)
+                    b.x = pack.position.x;
+                if(pack.position.y !== undefined)
+                    b.y = pack.position.y;
+                if(pack.angle !== undefined)
+                    b.angle = pack.angle;
+
+                //b.draw();
+            }else{
+            	new Bullet(data.bullet[i]);
+            }
+
+		}
+		//ctx.style.backgroundImg = url("/client/img/image.jpg");
+		for (var i = 0; i < data.player.length; i++) {
+			//ctx.drawImage(playerImg ,0, data[i].y, 100, 100);
+			//rotateAndPaintImage(ctx, playerImg, data.player[i].angle * TO_RADIANS, data.player[i].x, data.player[i].y, 100, 100);
+			var pack = data.player[i];
+            var p = Player.list[pack.id];
+            if(p){
+                if(pack.position.x !== undefined)
+                    p.x = pack.position.x;
+                if(pack.position.y !== undefined)
+                    p.y = pack.position.y;
+                if(pack.angle !== undefined)
+                    p.angle = pack.angle;
+                if(pack.hp !== undefined)
+                    p.hp = pack.hp;
+                //p.draw();
+            }else{
+            	new Player(data.player[i]);
+            }
+            
+		}
+		
+	});
+	
+	socket.on('remove',function(data){
+        //{player:[12323],bullet:[12323,123123]}
+        for(var i = 0 ; i < data.player.length; i++){
+            delete Player.list[data.player[i]];
+        }
+        for(var i = 0 ; i < data.bullet.length; i++){
+            delete Bullet.list[data.bullet[i]];
+        }
+    });
+
+	document.onkeydown = function( event ){
+		if (event.keyCode === 68) //d
+			socket.emit( 'keyPress', { inputId:'right', state: true } );
+		if (event.keyCode === 83) //s
+			socket.emit( 'keyPress', { inputId:'down', state: true } );
+		if (event.keyCode === 65) //a
+			socket.emit( 'keyPress', {inputId:'left', state: true } ) ;
+		if (event.keyCode === 87) //w
+			socket.emit( 'keyPress', { inputId:'up', state: true } );
+		if (event.keyCode === 16 )//shift
+			socket.emit( 'keyPress', { inputId:'lshift', state: true } );
+	}
+
+	document.onmousedown = function( event ){
+		if(event.button === 0){
+			socket.emit( 'keyPress', { inputId:'lmb', state: true } );
+		}
+	}
+
+	document.onmouseup = function( event ){
+		if(event.button === 0){
+			socket.emit( 'keyPress', { inputId:'lmb', state: false } );
+		}
+		
+	}
+	
+	document.onkeyup = function( event ){
+		if(event.keyCode === 68) //d
+			socket.emit( 'keyPress', { inputId:'right', state: false } );
+		if(event.keyCode === 83) //s
+			socket.emit( 'keyPress', { inputId:'down', state: false } );
+		if(event.keyCode === 65) //a
+			socket.emit( 'keyPress', { inputId:'left', state: false } );
+		if(event.keyCode === 87) //w
+			socket.emit( 'keyPress', { inputId:'up', state: false } );
+		if(event.keyCode === 16 ){ //shift{
+			socket.emit( 'keyPress', { inputId:'lshift', state: false } );
+		}
+	}
+	
+	function rotateAndPaintImage ( context, image, angleInRad , positionX, positionY, width, height ) {
+	  context.translate( positionX, positionY );
+	  context.rotate( angleInRad );
+	  context.drawImage( image, -width / 2, -height / 2, width, height );
+	  context.rotate( -angleInRad );
+	  context.translate( -positionX, -positionY );
+	}
+
+</script>
+</body>
