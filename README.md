@@ -1,4 +1,4 @@
-#About
+# About
 This exciting project is a simple JavaScript game that has been developed using Node.js,
 a popular server-side platform that enables the creation of highly scalable and performant web applications. 
 Built with the Express server and Socket.io library, 
